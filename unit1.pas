@@ -40,7 +40,7 @@ var
   DefaultPath: string;
 begin
   // Look for defaults.ini in the same folder as the exe
-  DefaultPath := ExtractFilePath(ParamStr(0)) + 'defaults.ini';
+  DefaultPath := ExtractFilePath(ParamStr(0)) + 'default_choices.ini';
 
   Ini := TIniFile.Create(DefaultPath);
   try
@@ -74,7 +74,7 @@ begin
   // If for some reason ParamStr(0) fails (unlikely), fallback to current dir
   if USBPath = '' then USBPath := ExtractFilePath(GetCurrentDir);
 
-  FinalFilePath := IncludeTrailingPathDelimiter(USBPath) + 'final_settings.ini';
+  FinalFilePath := IncludeTrailingPathDelimiter(USBPath) + 'user_choices.ini';
 
   Ini := TIniFile.Create(FinalFilePath);
   try

@@ -7,6 +7,7 @@ object Form1: TForm1
   ClientHeight = 240
   ClientWidth = 320
   LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
   object BtnSave: TButton
     Left = 16
     Height = 25
