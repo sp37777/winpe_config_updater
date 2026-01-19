@@ -1,7 +1,7 @@
 object Form1: TForm1
-  Left = 227
+  Left = 238
   Height = 240
-  Top = 213
+  Top = 116
   Width = 320
   Caption = 'Form1'
   ClientHeight = 240
@@ -15,6 +15,7 @@ object Form1: TForm1
     HelpType = htKeyword
     Caption = 'Save'
     TabOrder = 0
+    OnClick = BtnSaveClick
   end
   object EditUsername: TEdit
     Left = 16
@@ -25,17 +26,17 @@ object Form1: TForm1
     Text = 'Username'
   end
   object ChkUpdate: TCheckBox
-    Left = 120
+    Left = 104
     Height = 19
-    Top = 48
+    Top = 72
     Width = 102
     Caption = 'Disable Updates'
     TabOrder = 2
   end
   object ChkDrivers: TCheckBox
-    Left = 120
+    Left = 104
     Height = 19
-    Top = 80
+    Top = 48
     Width = 106
     Caption = 'Disable defender'
     TabOrder = 3
