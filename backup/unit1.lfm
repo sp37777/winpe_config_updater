@@ -8,37 +8,69 @@ object Form1: TForm1
   ClientWidth = 320
   LCLVersion = '4.4.0.0'
   object BtnSave: TButton
-    Left = 224
+    Left = 16
     Height = 25
-    Top = 200
+    Top = 192
     Width = 75
     HelpType = htKeyword
     Caption = 'Save'
     TabOrder = 0
     OnClick = BtnSaveClick
   end
-  object EditUsername: TEdit
+  object UserName: TEdit
     Left = 16
     Height = 23
     Top = 8
     Width = 283
     TabOrder = 1
-    Text = 'Username'
+    Text = 'User'
   end
-  object ChkUpdate: TCheckBox
-    Left = 104
+  object DisableUpdates: TCheckBox
+    Left = 16
     Height = 19
-    Top = 72
+    Top = 64
     Width = 102
     Caption = 'Disable Updates'
     TabOrder = 2
   end
-  object ChkDrivers: TCheckBox
-    Left = 104
+  object DisableDefender: TCheckBox
+    Left = 16
     Height = 19
-    Top = 48
+    Top = 40
     Width = 106
     Caption = 'Disable defender'
     TabOrder = 3
+  end
+  object DisableUAC: TCheckBox
+    Left = 16
+    Height = 19
+    Top = 88
+    Width = 80
+    Caption = 'DisableUAC'
+    TabOrder = 4
+  end
+  object DisableLastAccessTime: TCheckBox
+    Left = 16
+    Height = 19
+    Top = 114
+    Width = 139
+    Caption = 'DisableLastAccessTime'
+    TabOrder = 5
+  end
+  object DisableEncryption: TCheckBox
+    Left = 16
+    Height = 19
+    Top = 136
+    Width = 113
+    Caption = 'DisableEncryption'
+    TabOrder = 6
+  end
+  object DisableCoreIsolation: TCheckBox
+    Left = 16
+    Height = 19
+    Top = 160
+    Width = 126
+    Caption = 'DisableCoreIsolation'
+    TabOrder = 7
   end
 end
