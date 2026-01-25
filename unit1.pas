@@ -5,12 +5,15 @@ unit Unit1;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, IniFiles;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls,
+  IniFiles;
 
 type
   { TForm1 }
   TForm1 = class(TForm)
     BtnSave: TButton;
+    CheckGroup1: TCheckGroup;
+    DisableUIBeatification: TCheckBox;
     DisableCoreIsolation: TCheckBox;
     DisableEncryption: TCheckBox;
     DisableLastAccessTime: TCheckBox;
@@ -52,6 +55,7 @@ begin
     DisableLastAccessTime.Checked := Ini.ReadBool('Tweaks', 'DisableLastAccessTime', False);
     DisableEncryption.Checked := Ini.ReadBool('Tweaks', 'DisableEncryption', False);
     DisableCoreIsolation.Checked := Ini.ReadBool('Tweaks', 'DisableCoreIsolation', False);
+    DisableUIBeatification.Checked := Ini.ReadBool('Tweaks', 'DisableUIBeatification', False);
   finally
     Ini.Free;
   end;
@@ -86,6 +90,7 @@ begin
     Ini.WriteBool('Tweaks', 'DisableLastAccessTime', DisableLastAccessTime.Checked);
     Ini.WriteBool('Tweaks', 'DisableEncryption', DisableEncryption.Checked);
     Ini.WriteBool('Tweaks', 'DisableCoreIsolation', DisableCoreIsolation.Checked);
+    Ini.WriteBool('Tweaks', 'DisableUIBeatification', DisableUIBeatification.Checked);
 
     // Save to physical disk
     Ini.UpdateFile;

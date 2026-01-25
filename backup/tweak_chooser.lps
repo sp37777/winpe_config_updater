@@ -3,7 +3,7 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="ReleaseX64"/>
+    <BuildModes Active="ReleaseX32"/>
     <Units>
       <Unit>
         <Filename Value="tweak_chooser.lpr"/>
@@ -132,15 +132,4 @@
       </List>
     </HistoryLists>
   </ProjectSession>
-  <Debugging>
-    <BreakPoints>
-      <Item>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="unit1.pas"/>
-        <Line Value="48"/>
-      </Item>
-    </BreakPoints>
-  </Debugging>
 </CONFIG>
