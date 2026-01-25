@@ -1,94 +1,49 @@
 object Form1: TForm1
   Left = 238
-  Height = 429
+  Height = 482
   Top = 116
-  Width = 602
+  Width = 320
   Caption = 'Form1'
-  ClientHeight = 429
-  ClientWidth = 602
+  ClientHeight = 482
+  ClientWidth = 320
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   object BtnSave: TButton
-    Left = 128
-    Height = 25
-    Top = 248
-    Width = 75
+    AnchorSideLeft.Control = Owner
+    AnchorSideLeft.Side = asrCenter
+    AnchorSideTop.Control = CheckGroup1
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = CheckGroup1
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = Owner
+    AnchorSideBottom.Side = asrBottom
+    Left = 68
+    Height = 33
+    Top = 444
+    Width = 185
     HelpType = htKeyword
+    Anchors = [akLeft, akBottom]
+    BorderSpacing.Top = 5
+    BorderSpacing.Bottom = 5
     Caption = 'Save'
     TabOrder = 0
     OnClick = BtnSaveClick
   end
-  object UserName: TEdit
-    Left = 16
-    Height = 23
-    Top = 8
-    Width = 283
-    TabOrder = 1
-    Text = 'User'
-  end
-  object DisableUpdates: TCheckBox
-    Left = 16
-    Height = 19
-    Top = 64
-    Width = 102
-    Caption = 'Disable Updates'
-    TabOrder = 2
-  end
-  object DisableDefender: TCheckBox
-    Left = 16
-    Height = 19
-    Top = 40
-    Width = 106
-    Caption = 'Disable defender'
-    TabOrder = 3
-  end
-  object DisableUAC: TCheckBox
-    Left = 16
-    Height = 19
-    Top = 88
-    Width = 80
-    Caption = 'DisableUAC'
-    TabOrder = 4
-  end
-  object DisableLastAccessTime: TCheckBox
-    Left = 16
-    Height = 19
-    Top = 114
-    Width = 139
-    Caption = 'DisableLastAccessTime'
-    TabOrder = 5
-  end
-  object DisableEncryption: TCheckBox
-    Left = 16
-    Height = 19
-    Top = 136
-    Width = 113
-    Caption = 'DisableEncryption'
-    TabOrder = 6
-  end
-  object DisableCoreIsolation: TCheckBox
-    Left = 16
-    Height = 19
-    Top = 160
-    Width = 126
-    Caption = 'DisableCoreIsolation'
-    TabOrder = 7
-  end
-  object DisableUIBeatification: TCheckBox
-    Left = 16
-    Height = 19
-    Top = 184
-    Width = 133
-    Caption = 'DisableUIBeatification'
-    TabOrder = 8
-  end
   object CheckGroup1: TCheckGroup
-    Left = 176
-    Height = 105
-    Top = 40
+    AnchorSideLeft.Control = Owner
+    AnchorSideLeft.Side = asrCenter
+    AnchorSideTop.Control = ScrollBox1
+    AnchorSideTop.Side = asrBottom
+    AnchorSideBottom.Control = BtnSave
+    Left = 68
+    Height = 290
+    Top = 149
     Width = 185
+    Anchors = [akTop, akLeft, akBottom]
     AutoFill = True
-    Caption = 'CheckGroup1'
+    BorderSpacing.Top = 5
+    BorderSpacing.Bottom = 5
+    Caption = 'Triggers'
     ChildSizing.LeftRightSpacing = 6
     ChildSizing.TopBottomSpacing = 6
     ChildSizing.EnlargeHorizontal = crsHomogenousChildResize
@@ -97,14 +52,21 @@ object Form1: TForm1
     ChildSizing.ShrinkVertical = crsScaleChilds
     ChildSizing.Layout = cclLeftToRightThenTopToBottom
     ChildSizing.ControlsPerLine = 1
-    ClientHeight = 85
-    ClientWidth = 181
-    Items.Strings = (
-      'DisableDisabler'
-    )
-    TabOrder = 9
-    Data = {
-      0100000002
-    }
+    TabOrder = 1
+  end
+  object ScrollBox1: TScrollBox
+    AnchorSideLeft.Control = CheckGroup1
+    AnchorSideTop.Control = Owner
+    AnchorSideRight.Control = CheckGroup1
+    AnchorSideRight.Side = asrBottom
+    Left = 68
+    Height = 139
+    Top = 5
+    Width = 185
+    HorzScrollBar.Page = 1
+    VertScrollBar.Page = 1
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 5
+    TabOrder = 2
   end
 end

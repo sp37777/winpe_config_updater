@@ -1,0 +1,79 @@
+procedure TForm1.SaveConfigToIni;
+var
+  Ini: TIniFile;
+  i: Integer;
+begin
+  Ini := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
+  try
+    for i := 0 to CheckGroup1.Items.Count - 1 do
+    begin
+      // Saves using the text of the checkbox as the Key
+      Ini.WriteBool('Settings', CheckGroup1.Items[i], CheckGroup1.Checked[i]);
+    end;
+  finally
+    Ini.Free;
+  end;
+end;
+
+
+
+
+
+
+
+
+procedure TForm1.LoadConfigFromIni;
+var
+  Ini: TIniFile;
+  i: Integer;
+begin
+  Ini := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
+  try
+    for i := 0 to CheckGroup1.Items.Count - 1 do
+    begin
+      // Reads the state; defaults to False if not found in INI
+      CheckGroup1.Checked[i] := Ini.ReadBool('Settings', CheckGroup1.Items[i], False);
+    end;
+  finally
+    Ini.Free;
+  end;
+end;
+
+
+
+
+
+uses IniFiles;
+
+procedure TForm1.PopulateCheckGroupFromIni;
+var
+  Ini: TIniFile;
+  SettingsList: TStringList;
+  i: Integer;
+  KeyName: string;
+begin
+  Ini := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
+  SettingsList := TStringList.Create;
+  try
+    // 1. Grab all keys from the [Settings] section
+    Ini.ReadSection('Settings', SettingsList);
+    
+    // 2. Clear existing items and prep the CheckGroup
+    CheckGroup1.Items.BeginUpdate; // Prevents flickering
+    CheckGroup1.Items.Clear;
+    
+    for i := 0 to SettingsList.Count - 1 do
+    begin
+      KeyName := SettingsList[i];
+      // Add the key name as a checkbox item
+      CheckGroup1.Items.Add(KeyName);
+      // Set its checked state based on the value in the INI
+      CheckGroup1.Checked[i] := Ini.ReadBool('Settings', KeyName, False);
+    end;
+    
+    CheckGroup1.Items.EndUpdate;
+  finally
+    SettingsList.Free;
+    Ini.Free;
+  end;
+end;

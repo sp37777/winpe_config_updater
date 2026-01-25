@@ -13,14 +13,7 @@ type
   TForm1 = class(TForm)
     BtnSave: TButton;
     CheckGroup1: TCheckGroup;
-    DisableUIBeatification: TCheckBox;
-    DisableCoreIsolation: TCheckBox;
-    DisableEncryption: TCheckBox;
-    DisableLastAccessTime: TCheckBox;
-    DisableUAC: TCheckBox;
-    DisableUpdates: TCheckBox;
-    DisableDefender: TCheckBox;
-    UserName: TEdit;
+    ScrollBox1: TScrollBox;
     procedure BtnSaveClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
   private
@@ -36,32 +29,99 @@ implementation
 
 { TForm1 }
 
-// --- 1. LOAD DEFAULTS WHEN APP OPENS ---
+// LOAD DEFAULTS WHEN APP OPENS ---
 procedure TForm1.FormCreate(Sender: TObject);
 var
   Ini: TIniFile;
-  DefaultPath: string;
+  SettingsList: TStringList;
+  i: Integer;
+  KeyName: string;
 begin
-  // Look for defaults.ini in the same folder as the exe
-  DefaultPath := ExtractFilePath(ParamStr(0)) + 'default_choices.ini';
-
-  Ini := TIniFile.Create(DefaultPath);
+  Ini := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'default_choices.ini');
+  SettingsList := TStringList.Create;
   try
-    // Read values: if the file/key doesn't exist, it uses the 3rd parameter
-    UserName.Text := Ini.ReadString('User', 'UserName', 'User');
-    DisableDefender.Checked := Ini.ReadBool('Tweaks', 'DisableDefender', False);
-    DisableUpdates.Checked := Ini.ReadBool('Tweaks', 'DisableUpdates', False);
-    DisableUAC.Checked := Ini.ReadBool('Tweaks', 'DisableUAC', False);
-    DisableLastAccessTime.Checked := Ini.ReadBool('Tweaks', 'DisableLastAccessTime', False);
-    DisableEncryption.Checked := Ini.ReadBool('Tweaks', 'DisableEncryption', False);
-    DisableCoreIsolation.Checked := Ini.ReadBool('Tweaks', 'DisableCoreIsolation', False);
-    DisableUIBeatification.Checked := Ini.ReadBool('Tweaks', 'DisableUIBeatification', False);
+    // 1. Grab all keys from the [Settings] section
+    Ini.ReadSection('Settings', SettingsList);
+
+    // 2. Clear existing items and prep the CheckGroup
+    CheckGroup1.Items.BeginUpdate; // Prevents flickering
+    CheckGroup1.Items.Clear;
+
+    for i := 0 to SettingsList.Count - 1 do
+    begin
+      KeyName := SettingsList[i];
+      if IsBoolean(IniValue) then
+      begin
+        // Add the key name as a checkbox item
+        CheckGroup1.Items.Add(KeyName);
+        // Set its checked state based on the value in the INI
+        CheckGroup1.Checked[i] := Ini.ReadBool('Settings', KeyName, False);
+      end;
+    end;
+
+    CheckGroup1.Items.EndUpdate;
   finally
+    SettingsList.Free;
     Ini.Free;
   end;
 end;
 
-// --- 2. SAVE CHOICES AND EXIT ---
+function IsBoolean(const AValue: string): Boolean;
+var
+  LowerVal: string;
+begin
+  LowerVal := LowerCase(AValue);
+  Result := (LowerVal = '0') or (LowerVal = '1') or
+            (LowerVal = 'true') or (LowerVal = 'false');
+end;
+
+procedure TForm1.SyncUIWithIni(const FileName: string);
+var
+  Ini: TIniFile;
+  Keys: TStringList;
+  I: Integer;
+  Value: string;
+  NewEdit: TEdit;
+  NewLabel: TLabel;
+begin
+  Ini := TIniFile.Create(FileName);
+  Keys := TStringList.Create;
+  try
+    Ini.ReadSection('Tweaks', Keys);
+    for I := 0 to Keys.Count - 1 do
+    begin
+      Value := Ini.ReadString('Tweaks', Keys[I], '');
+
+      if IsBoolean(Value) then
+      begin
+        // Add to your TCheckGroup
+        CheckGroup1.Items.Add(Keys[I]);
+        CheckGroup1.Checked[CheckGroup1.Items.Count - 1] := Ini.ReadBool('Tweaks', Keys[I], False);
+      end
+      else
+      begin
+        // Create a Label
+        NewLabel := TLabel.Create(Self);
+        NewLabel.Parent := ScrollBox1; // Use a ScrollBox to manage space
+        NewLabel.Caption := Keys[I] + ':';
+        NewLabel.Align := alTop;
+        NewLabel.Margins.Top := 10;
+
+        // Create an Edit for the string
+        NewEdit := TEdit.Create(Self);
+        NewEdit.Parent := ScrollBox1;
+        NewEdit.Text := Value;
+        NewEdit.Name := 'edt_' + Keys[I]; // Name it so you can find it later
+        NewEdit.Align := alTop;
+      end;
+    end;
+  finally
+    Keys.Free;
+    Ini.Free;
+  end;
+end;
+
+// SAVE CHOICES AND EXIT ---
 procedure TForm1.BtnSaveClick(Sender: TObject);
 var
   Ini: TIniFile;
