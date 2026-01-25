@@ -5,8 +5,8 @@ unit Unit1;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, StdCtrls, ExtCtrls,
-  IniFiles;
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ExtCtrls, StdCtrls,
+  IniFiles, LCLIntf, LCLType, Windows; // Standard Lazarus units (No Winapi prefix)
 
 type
   { TForm1 }
@@ -14,10 +14,15 @@ type
     BtnSave: TButton;
     CheckGroup1: TCheckGroup;
     ScrollBox1: TScrollBox;
-    procedure BtnSaveClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure BtnSaveClick(Sender: TObject);
   private
+    procedure ClearDynamicComponents;
+    function IsBoolean(const AValue: string): Boolean;
+    function SafeName(const AKey: string): string;
+    function UnsafeName(const AName: string): string;
   public
+    procedure SyncUIWithIni(const FileName: string);
   end;
 
 var
@@ -25,54 +30,40 @@ var
 
 implementation
 
-{$R *.lfm}
+{$R *.lfm} // Lazarus uses .lfm instead of .dfm
 
 { TForm1 }
 
-// LOAD DEFAULTS WHEN APP OPENS ---
-procedure TForm1.FormCreate(Sender: TObject);
+function TForm1.IsBoolean(const AValue: string): Boolean;
 var
-  Ini: TIniFile;
-  SettingsList: TStringList;
-  i: Integer;
-  KeyName: string;
+  L: string;
 begin
-  Ini := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'default_choices.ini');
-  SettingsList := TStringList.Create;
-  try
-    // 1. Grab all keys from the [Settings] section
-    Ini.ReadSection('Settings', SettingsList);
-
-    // 2. Clear existing items and prep the CheckGroup
-    CheckGroup1.Items.BeginUpdate; // Prevents flickering
-    CheckGroup1.Items.Clear;
-
-    for i := 0 to SettingsList.Count - 1 do
-    begin
-      KeyName := SettingsList[i];
-      if IsBoolean(IniValue) then
-      begin
-        // Add the key name as a checkbox item
-        CheckGroup1.Items.Add(KeyName);
-        // Set its checked state based on the value in the INI
-        CheckGroup1.Checked[i] := Ini.ReadBool('Settings', KeyName, False);
-      end;
-    end;
-
-    CheckGroup1.Items.EndUpdate;
-  finally
-    SettingsList.Free;
-    Ini.Free;
-  end;
+  L := LowerCase(Trim(AValue));
+  Result := (L = '0') or (L = '1') or (L = 'true') or (L = 'false') or (L = 'yes') or (L = 'no');
 end;
 
-function IsBoolean(const AValue: string): Boolean;
-var
-  LowerVal: string;
+function TForm1.SafeName(const AKey: string): string;
 begin
-  LowerVal := LowerCase(AValue);
-  Result := (LowerVal = '0') or (LowerVal = '1') or
-            (LowerVal = 'true') or (LowerVal = 'false');
+  // Lazarus component names cannot have spaces
+  Result := StringReplace(AKey, ' ', '_', [rfReplaceAll]);
+end;
+
+function TForm1.UnsafeName(const AName: string): string;
+begin
+  // Remove 'edt_' and change underscores back to spaces
+  Result := StringReplace(Copy(AName, 5, Length(AName)), '_', ' ', [rfReplaceAll]);
+end;
+
+procedure TForm1.ClearDynamicComponents;
+var
+  I: Integer;
+begin
+  // Loop backwards when freeing components
+  for I := Self.ComponentCount - 1 downto 0 do
+  begin
+    if (Pos('edt_', Components[I].Name) = 1) or (Pos('lbl_', Components[I].Name) = 1) then
+      Components[I].Free;
+  end;
 end;
 
 procedure TForm1.SyncUIWithIni(const FileName: string);
@@ -83,7 +74,14 @@ var
   Value: string;
   NewEdit: TEdit;
   NewLabel: TLabel;
+  LastTop: Integer;
 begin
+  ClearDynamicComponents;
+  CheckGroup1.Items.Clear;
+  LastTop := 10;
+
+  if not FileExists(FileName) then Exit;
+
   Ini := TIniFile.Create(FileName);
   Keys := TStringList.Create;
   try
@@ -94,25 +92,30 @@ begin
 
       if IsBoolean(Value) then
       begin
-        // Add to your TCheckGroup
         CheckGroup1.Items.Add(Keys[I]);
         CheckGroup1.Checked[CheckGroup1.Items.Count - 1] := Ini.ReadBool('Tweaks', Keys[I], False);
       end
       else
       begin
-        // Create a Label
+        // Create Label
         NewLabel := TLabel.Create(Self);
-        NewLabel.Parent := ScrollBox1; // Use a ScrollBox to manage space
+        NewLabel.Parent := ScrollBox1;
+        NewLabel.Name := 'lbl_' + SafeName(Keys[I]);
         NewLabel.Caption := Keys[I] + ':';
-        NewLabel.Align := alTop;
-        NewLabel.Margins.Top := 10;
+        NewLabel.Left := 10;
+        NewLabel.Top := LastTop;
 
-        // Create an Edit for the string
+        // Create Edit
         NewEdit := TEdit.Create(Self);
         NewEdit.Parent := ScrollBox1;
+        NewEdit.Name := 'edt_' + SafeName(Keys[I]);
         NewEdit.Text := Value;
-        NewEdit.Name := 'edt_' + Keys[I]; // Name it so you can find it later
-        NewEdit.Align := alTop;
+        NewEdit.Left := 10;
+        NewEdit.Top := LastTop + 18;
+        NewEdit.Width := ScrollBox1.Width - 40;
+        NewEdit.Anchors := [akLeft, akTop, akRight];
+
+        LastTop := NewEdit.Top + NewEdit.Height + 15;
       end;
     end;
   finally
@@ -121,45 +124,39 @@ begin
   end;
 end;
 
-// SAVE CHOICES AND EXIT ---
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+  SyncUIWithIni(ExtractFilePath(ParamStr(0)) + 'defaults.ini');
+end;
+
 procedure TForm1.BtnSaveClick(Sender: TObject);
 var
   Ini: TIniFile;
-  USBPath, FinalFilePath: string;
+  I: Integer;
+  ActualKey: string;
 begin
-  if DisableDefender = nil then
-  begin
-    ShowMessage('Error: ChkDefender is Nil! The component is not connected to the form.');
-    Exit;
-  end;
-  // Get the drive letter (e.g., "D:")
-  USBPath := ExtractFilePath(ParamStr(0));
-
-  // If for some reason ParamStr(0) fails (unlikely), fallback to current dir
-  if USBPath = '' then USBPath := ExtractFilePath(GetCurrentDir);
-
-  FinalFilePath := IncludeTrailingPathDelimiter(USBPath) + 'user_choices.ini';
-
-  Ini := TIniFile.Create(FinalFilePath);
+  Ini := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'user_choices.ini');
   try
-    // Write current UI state
-    Ini.WriteString('User', 'UserName', UserName.Text);
-    Ini.WriteBool('Tweaks', 'DisableDefender', DisableDefender.Checked);
-    Ini.WriteBool('Tweaks', 'DisableUpdates', DisableUpdates.Checked);
-    Ini.WriteBool('Tweaks', 'DisableUAC', DisableUAC.Checked);
-    Ini.WriteBool('Tweaks', 'DisableLastAccessTime', DisableLastAccessTime.Checked);
-    Ini.WriteBool('Tweaks', 'DisableEncryption', DisableEncryption.Checked);
-    Ini.WriteBool('Tweaks', 'DisableCoreIsolation', DisableCoreIsolation.Checked);
-    Ini.WriteBool('Tweaks', 'DisableUIBeatification', DisableUIBeatification.Checked);
+    // 1. Save Booleans
+    for I := 0 to CheckGroup1.Items.Count - 1 do
+    begin
+      Ini.WriteBool('Tweaks', CheckGroup1.Items[I], CheckGroup1.Checked[I]);
+    end;
 
-    // Save to physical disk
-    Ini.UpdateFile;
+    // 2. Save Strings
+    for I := 0 to Self.ComponentCount - 1 do
+    begin
+      if (Components[I] is TEdit) and (Pos('edt_', Components[I].Name) = 1) then
+      begin
+        ActualKey := UnsafeName(Components[I].Name);
+        Ini.WriteString('Tweaks', ActualKey, TEdit(Components[I]).Text);
+      end;
+    end;
   finally
     Ini.Free;
   end;
 
-  // Terminate the application
-  Application.Terminate;
+  Application.Terminate; // Close and proceed with installation
 end;
 
 end.
