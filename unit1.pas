@@ -69,9 +69,9 @@ end;
 procedure TForm1.SyncUIWithIni(const FileName: string);
 var
   Ini: TIniFile;
-  Keys: TStringList;
-  I: Integer;
-  Value: string;
+  Sections, Keys: TStringList;
+  S, K: Integer;
+  Value, SectionName, KeyName: string;
   NewEdit: TEdit;
   NewLabel: TLabel;
   LastTop: Integer;
@@ -83,42 +83,56 @@ begin
   if not FileExists(FileName) then Exit;
 
   Ini := TIniFile.Create(FileName);
+  Sections := TStringList.Create;
   Keys := TStringList.Create;
   try
-    Ini.ReadSection('Tweaks', Keys);
-    for I := 0 to Keys.Count - 1 do
+    // 1. Get a list of all section names ([User], [Tweaks], etc.)
+    Ini.ReadSections(Sections);
+
+    // 2. Loop through each section
+    for S := 0 to Sections.Count - 1 do
     begin
-      Value := Ini.ReadString('Tweaks', Keys[I], '');
+      SectionName := Sections[S];
+      Keys.Clear;
+      Ini.ReadSection(SectionName, Keys);
 
-      if IsBoolean(Value) then
+      // 3. Loop through each key in the current section
+      for K := 0 to Keys.Count - 1 do
       begin
-        CheckGroup1.Items.Add(Keys[I]);
-        CheckGroup1.Checked[CheckGroup1.Items.Count - 1] := Ini.ReadBool('Tweaks', Keys[I], False);
-      end
-      else
-      begin
-        // Create Label
-        NewLabel := TLabel.Create(Self);
-        NewLabel.Parent := ScrollBox1;
-        NewLabel.Name := 'lbl_' + SafeName(Keys[I]);
-        NewLabel.Caption := Keys[I] + ':';
-        NewLabel.Left := 10;
-        NewLabel.Top := LastTop;
+        KeyName := Keys[K];
+        Value := Ini.ReadString(SectionName, KeyName, '');
 
-        // Create Edit
-        NewEdit := TEdit.Create(Self);
-        NewEdit.Parent := ScrollBox1;
-        NewEdit.Name := 'edt_' + SafeName(Keys[I]);
-        NewEdit.Text := Value;
-        NewEdit.Left := 10;
-        NewEdit.Top := LastTop + 18;
-        NewEdit.Width := ScrollBox1.Width - 40;
-        NewEdit.Anchors := [akLeft, akTop, akRight];
+        if IsBoolean(Value) then
+        begin
+          CheckGroup1.Items.Add(KeyName);
+          CheckGroup1.Checked[CheckGroup1.Items.Count - 1] := Ini.ReadBool(SectionName, KeyName, False);
+        end
+        else
+        begin
+          // Create Label for the string
+          NewLabel := TLabel.Create(Self);
+          NewLabel.Parent := ScrollBox1;
+          NewLabel.Name := 'lbl_' + SafeName(KeyName);
+          NewLabel.Caption := KeyName + ':';
+          NewLabel.Left := 10;
+          NewLabel.Top := LastTop;
 
-        LastTop := NewEdit.Top + NewEdit.Height + 15;
+          // Create Edit for the string
+          NewEdit := TEdit.Create(Self);
+          NewEdit.Parent := ScrollBox1;
+          NewEdit.Name := 'edt_' + SafeName(KeyName);
+          NewEdit.Text := Value;
+          NewEdit.Left := 10;
+          NewEdit.Top := LastTop + 18;
+          NewEdit.Width := ScrollBox1.ClientWidth - 25;
+          NewEdit.Anchors := [akLeft, akTop, akRight];
+
+          LastTop := NewEdit.Top + NewEdit.Height + 15;
+        end;
       end;
     end;
   finally
+    Sections.Free;
     Keys.Free;
     Ini.Free;
   end;
@@ -133,30 +147,29 @@ procedure TForm1.BtnSaveClick(Sender: TObject);
 var
   Ini: TIniFile;
   I: Integer;
-  ActualKey: string;
 begin
+  // We save everything into one flat section [Setup] to make it easy for the installer
   Ini := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'user_choices.ini');
   try
-    // 1. Save Booleans
+    // Save all booleans from CheckGroup
     for I := 0 to CheckGroup1.Items.Count - 1 do
     begin
-      Ini.WriteBool('Tweaks', CheckGroup1.Items[I], CheckGroup1.Checked[I]);
+      Ini.WriteBool('Setup', CheckGroup1.Items[I], CheckGroup1.Checked[I]);
     end;
 
-    // 2. Save Strings
+    // Save all strings from TEdits
     for I := 0 to Self.ComponentCount - 1 do
     begin
       if (Components[I] is TEdit) and (Pos('edt_', Components[I].Name) = 1) then
       begin
-        ActualKey := UnsafeName(Components[I].Name);
-        Ini.WriteString('Tweaks', ActualKey, TEdit(Components[I]).Text);
+        Ini.WriteString('Setup', UnsafeName(Components[I].Name), TEdit(Components[I]).Text);
       end;
     end;
   finally
     Ini.Free;
   end;
 
-  Application.Terminate; // Close and proceed with installation
+  Application.Terminate;
 end;
 
 end.

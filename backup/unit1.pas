@@ -69,9 +69,9 @@ end;
 procedure TForm1.SyncUIWithIni(const FileName: string);
 var
   Ini: TIniFile;
-  Keys: TStringList;
-  I: Integer;
-  Value: string;
+  Sections, Keys: TStringList;
+  S, K: Integer;
+  Value, SectionName, KeyName: string;
   NewEdit: TEdit;
   NewLabel: TLabel;
   LastTop: Integer;
@@ -83,42 +83,56 @@ begin
   if not FileExists(FileName) then Exit;
 
   Ini := TIniFile.Create(FileName);
+  Sections := TStringList.Create;
   Keys := TStringList.Create;
   try
-    Ini.ReadSection('Tweaks', Keys);
-    for I := 0 to Keys.Count - 1 do
+    // 1. Get a list of all section names ([User], [Tweaks], etc.)
+    Ini.ReadSections(Sections);
+
+    // 2. Loop through each section
+    for S := 0 to Sections.Count - 1 do
     begin
-      Value := Ini.ReadString('Tweaks', Keys[I], '');
+      SectionName := Sections[S];
+      Keys.Clear;
+      Ini.ReadSection(SectionName, Keys);
 
-      if IsBoolean(Value) then
+      // 3. Loop through each key in the current section
+      for K := 0 to Keys.Count - 1 do
       begin
-        CheckGroup1.Items.Add(Keys[I]);
-        CheckGroup1.Checked[CheckGroup1.Items.Count - 1] := Ini.ReadBool('Tweaks', Keys[I], False);
-      end
-      else
-      begin
-        // Create Label
-        NewLabel := TLabel.Create(Self);
-        NewLabel.Parent := ScrollBox1;
-        NewLabel.Name := 'lbl_' + SafeName(Keys[I]);
-        NewLabel.Caption := Keys[I] + ':';
-        NewLabel.Left := 10;
-        NewLabel.Top := LastTop;
+        KeyName := Keys[K];
+        Value := Ini.ReadString(SectionName, KeyName, '');
 
-        // Create Edit
-        NewEdit := TEdit.Create(Self);
-        NewEdit.Parent := ScrollBox1;
-        NewEdit.Name := 'edt_' + SafeName(Keys[I]);
-        NewEdit.Text := Value;
-        NewEdit.Left := 10;
-        NewEdit.Top := LastTop + 18;
-        NewEdit.Width := ScrollBox1.Width - 40;
-        NewEdit.Anchors := [akLeft, akTop, akRight];
+        if IsBoolean(Value) then
+        begin
+          CheckGroup1.Items.Add(KeyName);
+          CheckGroup1.Checked[CheckGroup1.Items.Count - 1] := Ini.ReadBool(SectionName, KeyName, False);
+        end
+        else
+        begin
+          // Create Label for the string
+          NewLabel := TLabel.Create(Self);
+          NewLabel.Parent := ScrollBox1;
+          NewLabel.Name := 'lbl_' + SafeName(KeyName);
+          NewLabel.Caption := KeyName + ':';
+          NewLabel.Left := 10;
+          NewLabel.Top := LastTop;
 
-        LastTop := NewEdit.Top + NewEdit.Height + 15;
+          // Create Edit for the string
+          NewEdit := TEdit.Create(Self);
+          NewEdit.Parent := ScrollBox1;
+          NewEdit.Name := 'edt_' + SafeName(KeyName);
+          NewEdit.Text := Value;
+          NewEdit.Left := 10;
+          NewEdit.Top := LastTop + 18;
+          NewEdit.Width := ScrollBox1.ClientWidth - 25;
+          NewEdit.Anchors := [akLeft, akTop, akRight];
+
+          LastTop := NewEdit.Top + NewEdit.Height + 15;
+        end;
       end;
     end;
   finally
+    Sections.Free;
     Keys.Free;
     Ini.Free;
   end;
@@ -126,7 +140,7 @@ end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  SyncUIWithIni(ExtractFilePath(ParamStr(0)) + 'defaults.ini');
+  SyncUIWithIni(ExtractFilePath(ParamStr(0)) + 'default_choices.ini');
 end;
 
 procedure TForm1.BtnSaveClick(Sender: TObject);
