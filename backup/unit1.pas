@@ -147,30 +147,33 @@ procedure TForm1.BtnSaveClick(Sender: TObject);
 var
   Ini: TIniFile;
   I: Integer;
-  ActualKey: string;
+  OutputPath: string;
 begin
-  Ini := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'user_choices.ini');
+  OutputPath := ExtractFilePath(ParamStr(0)) + 'user_choices.ini';
+  // FIX: Delete the old file first to ensure no "ghost" sections remain
+  if FileExists(OutputPath) then DeleteFile(OutputPath);
+  // We save everything into one flat section [Setup] to make it easy for the installer
+  Ini := TIniFile.Create(OutputPath);
   try
-    // 1. Save Booleans
+    // Save all booleans from CheckGroup
     for I := 0 to CheckGroup1.Items.Count - 1 do
     begin
-      Ini.WriteBool('Tweaks', CheckGroup1.Items[I], CheckGroup1.Checked[I]);
+      Ini.WriteBool('Setup', CheckGroup1.Items[I], CheckGroup1.Checked[I]);
     end;
 
-    // 2. Save Strings
+    // Save all strings from TEdits
     for I := 0 to Self.ComponentCount - 1 do
     begin
       if (Components[I] is TEdit) and (Pos('edt_', Components[I].Name) = 1) then
       begin
-        ActualKey := UnsafeName(Components[I].Name);
-        Ini.WriteString('Tweaks', ActualKey, TEdit(Components[I]).Text);
+        Ini.WriteString('Setup', UnsafeName(Components[I].Name), TEdit(Components[I]).Text);
       end;
     end;
   finally
     Ini.Free;
   end;
 
-  Application.Terminate; // Close and proceed with installation
+  Application.Terminate;
 end;
 
 end.

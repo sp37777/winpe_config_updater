@@ -151,7 +151,7 @@ var
 begin
   OutputPath := ExtractFilePath(ParamStr(0)) + 'user_choices.ini';
   // FIX: Delete the old file first to ensure no "ghost" sections remain
-  if FileExists(OutputPath) then DeleteFile(OutputPath);
+  if FileExists(PChar(OutputPath)) then DeleteFile(PChar(OutputPath));
   // We save everything into one flat section [Setup] to make it easy for the installer
   Ini := TIniFile.Create(OutputPath);
   try
