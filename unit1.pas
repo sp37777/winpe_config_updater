@@ -6,21 +6,26 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ExtCtrls, StdCtrls,
-  IniFiles, LCLIntf, LCLType, Windows; // Standard Lazarus units (No Winapi prefix)
+  ComCtrls, IniFiles;
 
 type
   { TForm1 }
   TForm1 = class(TForm)
     BtnSave: TButton;
-    CheckGroup1: TCheckGroup;
+    EditSearch: TEdit;
     ScrollBox1: TScrollBox;
+    StatusBar1: TStatusBar;
     procedure FormCreate(Sender: TObject);
     procedure BtnSaveClick(Sender: TObject);
+    procedure EditSearchKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
   private
-    procedure ClearDynamicComponents;
-    function IsBoolean(const AValue: string): Boolean;
+    { Internal Layout and State }
+    LastTopPosition: Integer;
+    procedure CreateDynamicField(const AName, AValue: string; IsHeader: Boolean = False);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: boolean);
     function SafeName(const AKey: string): string;
     function UnsafeName(const AName: string): string;
+    function GetConfigPath: string;
   public
     procedure SyncUIWithIni(const FileName: string);
   end;
@@ -30,149 +35,255 @@ var
 
 implementation
 
-{$R *.lfm} // Lazarus uses .lfm instead of .dfm
+{$R *.lfm}
 
 { TForm1 }
 
-function TForm1.IsBoolean(const AValue: string): Boolean;
-var
-  L: string;
-begin
-  L := LowerCase(Trim(AValue));
-  Result := (L = '0') or (L = '1') or (L = 'true') or (L = 'false') or (L = 'yes') or (L = 'no');
-end;
-
 function TForm1.SafeName(const AKey: string): string;
 begin
-  // Lazarus component names cannot have spaces
+  // Lazarus component names cannot have spaces or special chars
   Result := StringReplace(AKey, ' ', '_', [rfReplaceAll]);
+  Result := StringReplace(Result, '.', '_', [rfReplaceAll]);
 end;
 
 function TForm1.UnsafeName(const AName: string): string;
+var
+  BaseName: string;
 begin
-  // Remove 'edt_' and change underscores back to spaces
-  Result := StringReplace(Copy(AName, 5, Length(AName)), '_', ' ', [rfReplaceAll]);
+  // Strip the 'dyn_ed_' or 'dyn_cb_' prefix (7 characters)
+  BaseName := Copy(AName, 8, Length(AName));
+  Result := StringReplace(BaseName, '_', ' ', [rfReplaceAll]);
 end;
 
-procedure TForm1.ClearDynamicComponents;
+function TForm1.GetConfigPath: string;
 var
-  I: Integer;
+  SR: TSearchRec;
+  ExeDir: string;
 begin
-  // Loop backwards when freeing components
-  for I := Self.ComponentCount - 1 downto 0 do
+  Result := '';
+  ExeDir := ExtractFilePath(ParamStr(0));
+
+  // 1. Check named parameter
+  if Application.HasOption('c', 'config') then
+    Result := Application.GetOptionValue('c', 'config');
+
+  // 2. Search for *default*.ini if no valid path yet
+  if (Result = '') or (not FileExists(Result)) then
   begin
-    if (Pos('edt_', Components[I].Name) = 1) or (Pos('lbl_', Components[I].Name) = 1) then
-      Components[I].Free;
+    if FindFirst(ExeDir + '*default*.ini', faAnyFile, SR) = 0 then
+    begin
+      Result := ExeDir + SR.Name;
+      FindClose(SR);
+    end;
   end;
+
+  // 3. Last resort fallback
+  if (Result = '') or (not FileExists(Result)) then
+    Result := ExeDir + 'settings.ini';
+end;
+
+procedure TForm1.EditSearchKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+var
+  i: Integer;
+  C: TControl;
+  SearchTerm: string;
+  CurrentTop: Integer;
+  Match: Boolean;
+begin
+  SearchTerm := Trim(LowerCase(EditSearch.Text));
+  CurrentTop := 10;
+
+  // Disable Alignments/Drawing temporarily for speed
+  ScrollBox1.DisableAlign;
+  try
+    for i := 0 to ScrollBox1.ControlCount - 1 do
+    begin
+      C := ScrollBox1.Controls[i];
+
+      // Check if this specific control matches the search
+      // We check Caption for Labels/CheckBoxes and Name for Edits
+      Match := (SearchTerm = '') or
+               (Pos(SearchTerm, LowerCase(TControl(C).Caption)) > 0) or
+               (Pos(SearchTerm, LowerCase(C.Name)) > 0);
+
+      C.Visible := Match;
+
+      // Re-stack visible items so we don't have empty holes
+      if C.Visible then
+      begin
+        // If it's a Label or a standalone Checkbox, it starts a new "row"
+        if (C is TLabel) or (C is TCheckBox) then
+        begin
+           C.Top := CurrentTop;
+           // Only increment the 'next' top if it's the end of a row or a header
+           if (C is TCheckBox) or (C is TLabel) then CurrentTop := CurrentTop + 35;
+        end
+        else if (C is TEdit) then
+        begin
+           // Edits should stay aligned with the Label that was just processed
+           C.Top := CurrentTop - 35 - 4;
+        end;
+      end;
+    end;
+  finally
+    ScrollBox1.EnableAlign;
+  end;
+end;
+
+procedure TForm1.CreateDynamicField(const AName, AValue: string; IsHeader: Boolean = False);
+var
+  Lab: TLabel;
+  Ed: TEdit;
+  Cb: TCheckBox;
+  CleanName: string;
+  IsBool: Boolean;
+begin
+  if IsHeader then
+  begin
+    Lab := TLabel.Create(Self);
+    Lab.Parent := ScrollBox1;
+    Lab.Caption := AName;
+    Lab.Font.Style := [fsBold]; // Make it stand out
+    Lab.Top := LastTopPosition + 10;
+    Lab.Left := 10;
+    LastTopPosition := Lab.Top + 25;
+    Exit;
+  end;
+
+  CleanName := SafeName(AName);
+  // Improved Boolean check for 0/1, True/False
+  IsBool := SameText(AValue, 'True') or SameText(AValue, 'False') or
+            (AValue = '1') or (AValue = '0');
+
+  if IsBool then
+  begin
+    Cb := TCheckBox.Create(Self);
+    Cb.Parent := ScrollBox1;
+    Cb.Name := 'dyn_cb_' + CleanName;
+    Cb.Caption := AName;
+    Cb.Checked := StrToBoolDef(AValue, False);
+    Cb.Top := LastTopPosition;
+    Cb.Left := 10;
+  end
+  else
+  begin
+    Lab := TLabel.Create(Self);
+    Lab.Parent := ScrollBox1;
+    Lab.Caption := AName;
+    Lab.Top := LastTopPosition;
+    Lab.Left := 10;
+
+    Ed := TEdit.Create(Self);
+    Ed.Parent := ScrollBox1;
+    Ed.Name := 'dyn_ed_' + CleanName;
+    Ed.Text := AValue;
+    Ed.Top := Lab.Top - 4;
+    Ed.Left := 150;
+    Ed.Width := 200;
+    Ed.Anchors := [akTop, akLeft, akRight];
+  end;
+
+  LastTopPosition := LastTopPosition + 35;
 end;
 
 procedure TForm1.SyncUIWithIni(const FileName: string);
 var
   Ini: TIniFile;
-  Sections, Keys: TStringList;
-  S, K: Integer;
-  Value, SectionName, KeyName: string;
-  NewEdit: TEdit;
-  NewLabel: TLabel;
-  LastTop: Integer;
+  SectionList, KeyList: TStringList;
+  i, j: Integer;
+  UserNameFound: Boolean;
 begin
-  ClearDynamicComponents;
-  CheckGroup1.Items.Clear;
-  LastTop := 10;
+  // Cleanup old controls
+  for i := ScrollBox1.ControlCount - 1 downto 0 do ScrollBox1.Controls[i].Free;
 
-  if not FileExists(FileName) then Exit;
+  UserNameFound := False;
+  LastTopPosition := 10;
+  EditSearch.Text := '';
+  // Update Status Bar
+  if (FileName <> '') and FileExists(FileName) then
+    StatusBar1.SimpleText := ' Loaded: ' + FileName
+  else
+    StatusBar1.SimpleText := ' No config found. Using factory defaults.';
 
-  Ini := TIniFile.Create(FileName);
-  Sections := TStringList.Create;
-  Keys := TStringList.Create;
-  try
-    // 1. Get a list of all section names ([User], [Tweaks], etc.)
-    Ini.ReadSections(Sections);
-
-    // 2. Loop through each section
-    for S := 0 to Sections.Count - 1 do
-    begin
-      SectionName := Sections[S];
-      Keys.Clear;
-      Ini.ReadSection(SectionName, Keys);
-
-      // 3. Loop through each key in the current section
-      for K := 0 to Keys.Count - 1 do
+  if (FileName <> '') and FileExists(FileName) then
+  begin
+    Ini := TIniFile.Create(FileName);
+    SectionList := TStringList.Create;
+    KeyList := TStringList.Create;
+    try
+      Ini.ReadSections(SectionList);
+      for i := 0 to SectionList.Count - 1 do
       begin
-        KeyName := Keys[K];
-        Value := Ini.ReadString(SectionName, KeyName, '');
+        // Create the Category Header
+        CreateDynamicField(SectionList[i], '', True);
 
-        if IsBoolean(Value) then
+        KeyList.Clear;
+        Ini.ReadSection(SectionList[i], KeyList);
+        for j := 0 to KeyList.Count - 1 do
         begin
-          CheckGroup1.Items.Add(KeyName);
-          CheckGroup1.Checked[CheckGroup1.Items.Count - 1] := Ini.ReadBool(SectionName, KeyName, False);
-        end
-        else
-        begin
-          // Create Label for the string
-          NewLabel := TLabel.Create(Self);
-          NewLabel.Parent := ScrollBox1;
-          NewLabel.Name := 'lbl_' + SafeName(KeyName);
-          NewLabel.Caption := KeyName + ':';
-          NewLabel.Left := 10;
-          NewLabel.Top := LastTop;
-
-          // Create Edit for the string
-          NewEdit := TEdit.Create(Self);
-          NewEdit.Parent := ScrollBox1;
-          NewEdit.Name := 'edt_' + SafeName(KeyName);
-          NewEdit.Text := Value;
-          NewEdit.Left := 10;
-          NewEdit.Top := LastTop + 18;
-          NewEdit.Width := ScrollBox1.ClientWidth - 25;
-          NewEdit.Anchors := [akLeft, akTop, akRight];
-
-          LastTop := NewEdit.Top + NewEdit.Height + 15;
+          if SameText(KeyList[j], 'UserName') then UserNameFound := True;
+          CreateDynamicField(KeyList[j], Ini.ReadString(SectionList[i], KeyList[j], ''));
         end;
       end;
+    finally
+      KeyList.Free; SectionList.Free; Ini.Free;
     end;
-  finally
-    Sections.Free;
-    Keys.Free;
-    Ini.Free;
+  end;
+
+  if not UserNameFound then
+  begin
+    CreateDynamicField('Default Settings', '', True);
+    CreateDynamicField('UserName', 'User');
+  end;
+end;
+
+procedure TForm1.FormCloseQuery(Sender: TObject; var CanClose: boolean);
+begin
+  // QuestionDlg is great for WinPE as it is lightweight
+  if QuestionDlg('Exit Confirmation', 'Are you sure you want to exit? Any unsaved changes will be lost.',
+     mtConfirmation, [mrYes, mrNo], 0) = mrYes then
+  begin
+    CanClose := True;
+  end
+  else
+  begin
+    CanClose := False;
   end;
 end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  SyncUIWithIni(ExtractFilePath(ParamStr(0)) + 'default_choices.ini');
+  SyncUIWithIni(GetConfigPath);
 end;
 
 procedure TForm1.BtnSaveClick(Sender: TObject);
 var
   Ini: TIniFile;
   I: Integer;
+  C: TControl;
   OutputPath: string;
 begin
   OutputPath := ExtractFilePath(ParamStr(0)) + 'user_choices.ini';
-  // FIX: Delete the old file first to ensure no "ghost" sections remain
-  if FileExists(PChar(OutputPath)) then DeleteFile(PChar(OutputPath));
-  // We save everything into one flat section [Setup] to make it easy for the installer
+  
+  // Create new INI (this overwrites existing)
   Ini := TIniFile.Create(OutputPath);
   try
-    // Save all booleans from CheckGroup
-    for I := 0 to CheckGroup1.Items.Count - 1 do
+    // Iterate through everything inside the ScrollBox
+    for I := 0 to ScrollBox1.ControlCount - 1 do
     begin
-      Ini.WriteBool('Setup', CheckGroup1.Items[I], CheckGroup1.Checked[I]);
-    end;
-
-    // Save all strings from TEdits
-    for I := 0 to Self.ComponentCount - 1 do
-    begin
-      if (Components[I] is TEdit) and (Pos('edt_', Components[I].Name) = 1) then
-      begin
-        Ini.WriteString('Setup', UnsafeName(Components[I].Name), TEdit(Components[I]).Text);
-      end;
+      C := ScrollBox1.Controls[I];
+      
+      if (C is TEdit) and (Pos('dyn_ed_', C.Name) = 1) then
+        Ini.WriteString('Setup', UnsafeName(C.Name), TEdit(C).Text);
+        
+      if (C is TCheckBox) and (Pos('dyn_cb_', C.Name) = 1) then
+        Ini.WriteBool('Setup', UnsafeName(C.Name), TCheckBox(C).Checked);
     end;
   finally
     Ini.Free;
   end;
 
+  ShowMessage('Settings saved to: ' + OutputPath);
   Application.Terminate;
 end;
 
