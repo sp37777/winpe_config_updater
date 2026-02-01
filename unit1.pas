@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ExtCtrls, StdCtrls,
-  ComCtrls, IniFiles;
+  IniFiles, ComCtrls;
 
 type
   { TForm1 }
@@ -18,11 +18,10 @@ type
     procedure FormCreate(Sender: TObject);
     procedure BtnSaveClick(Sender: TObject);
     procedure EditSearchKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: boolean);
   private
-    { Internal Layout and State }
     LastTopPosition: Integer;
     procedure CreateDynamicField(const AName, AValue: string; IsHeader: Boolean = False);
-    procedure FormCloseQuery(Sender: TObject; var CanClose: boolean);
     function SafeName(const AKey: string): string;
     function UnsafeName(const AName: string): string;
     function GetConfigPath: string;
@@ -41,7 +40,6 @@ implementation
 
 function TForm1.SafeName(const AKey: string): string;
 begin
-  // Lazarus component names cannot have spaces or special chars
   Result := StringReplace(AKey, ' ', '_', [rfReplaceAll]);
   Result := StringReplace(Result, '.', '_', [rfReplaceAll]);
 end;
@@ -50,7 +48,7 @@ function TForm1.UnsafeName(const AName: string): string;
 var
   BaseName: string;
 begin
-  // Strip the 'dyn_ed_' or 'dyn_cb_' prefix (7 characters)
+  // dyn_ed_ or dyn_cb_ are 7 chars
   BaseName := Copy(AName, 8, Length(AName));
   Result := StringReplace(BaseName, '_', ' ', [rfReplaceAll]);
 end;
@@ -58,16 +56,24 @@ end;
 function TForm1.GetConfigPath: string;
 var
   SR: TSearchRec;
-  ExeDir: string;
+  ExeDir, ParamVal: string;
 begin
   Result := '';
   ExeDir := ExtractFilePath(ParamStr(0));
 
-  // 1. Check named parameter
   if Application.HasOption('c', 'config') then
-    Result := Application.GetOptionValue('c', 'config');
+  begin
+    ParamVal := Application.GetOptionValue('c', 'config');
 
-  // 2. Search for *default*.ini if no valid path yet
+    // Check if it's a full path already
+    if FileExists(ParamVal) then
+      Result := ParamVal
+    // Check if it's a relative path or filename in AppDir
+    else if FileExists(ExeDir + ParamVal) then
+      Result := ExeDir + ParamVal;
+  end;
+
+  // Search for *default*.ini if no valid path provided yet
   if (Result = '') or (not FileExists(Result)) then
   begin
     if FindFirst(ExeDir + '*default*.ini', faAnyFile, SR) = 0 then
@@ -75,58 +81,6 @@ begin
       Result := ExeDir + SR.Name;
       FindClose(SR);
     end;
-  end;
-
-  // 3. Last resort fallback
-  if (Result = '') or (not FileExists(Result)) then
-    Result := ExeDir + 'settings.ini';
-end;
-
-procedure TForm1.EditSearchKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
-var
-  i: Integer;
-  C: TControl;
-  SearchTerm: string;
-  CurrentTop: Integer;
-  Match: Boolean;
-begin
-  SearchTerm := Trim(LowerCase(EditSearch.Text));
-  CurrentTop := 10;
-
-  // Disable Alignments/Drawing temporarily for speed
-  ScrollBox1.DisableAlign;
-  try
-    for i := 0 to ScrollBox1.ControlCount - 1 do
-    begin
-      C := ScrollBox1.Controls[i];
-
-      // Check if this specific control matches the search
-      // We check Caption for Labels/CheckBoxes and Name for Edits
-      Match := (SearchTerm = '') or
-               (Pos(SearchTerm, LowerCase(TControl(C).Caption)) > 0) or
-               (Pos(SearchTerm, LowerCase(C.Name)) > 0);
-
-      C.Visible := Match;
-
-      // Re-stack visible items so we don't have empty holes
-      if C.Visible then
-      begin
-        // If it's a Label or a standalone Checkbox, it starts a new "row"
-        if (C is TLabel) or (C is TCheckBox) then
-        begin
-           C.Top := CurrentTop;
-           // Only increment the 'next' top if it's the end of a row or a header
-           if (C is TCheckBox) or (C is TLabel) then CurrentTop := CurrentTop + 35;
-        end
-        else if (C is TEdit) then
-        begin
-           // Edits should stay aligned with the Label that was just processed
-           C.Top := CurrentTop - 35 - 4;
-        end;
-      end;
-    end;
-  finally
-    ScrollBox1.EnableAlign;
   end;
 end;
 
@@ -136,26 +90,22 @@ var
   Ed: TEdit;
   Cb: TCheckBox;
   CleanName: string;
-  IsBool: Boolean;
 begin
   if IsHeader then
   begin
     Lab := TLabel.Create(Self);
     Lab.Parent := ScrollBox1;
-    Lab.Caption := AName;
-    Lab.Font.Style := [fsBold]; // Make it stand out
+    Lab.Caption := '--- ' + AName + ' ---';
+    Lab.Font.Style := [fsBold];
     Lab.Top := LastTopPosition + 10;
     Lab.Left := 10;
-    LastTopPosition := Lab.Top + 25;
+    LastTopPosition := Lab.Top + 30;
     Exit;
   end;
 
   CleanName := SafeName(AName);
-  // Improved Boolean check for 0/1, True/False
-  IsBool := SameText(AValue, 'True') or SameText(AValue, 'False') or
-            (AValue = '1') or (AValue = '0');
 
-  if IsBool then
+  if SameText(AValue, 'True') or SameText(AValue, 'False') or (AValue = '1') or (AValue = '0') then
   begin
     Cb := TCheckBox.Create(Self);
     Cb.Parent := ScrollBox1;
@@ -182,72 +132,50 @@ begin
     Ed.Width := 200;
     Ed.Anchors := [akTop, akLeft, akRight];
   end;
-
   LastTopPosition := LastTopPosition + 35;
 end;
 
 procedure TForm1.SyncUIWithIni(const FileName: string);
 var
   Ini: TIniFile;
-  SectionList, KeyList: TStringList;
+  Secs, Keys: TStringList;
   i, j: Integer;
-  UserNameFound: Boolean;
+  FoundUser: Boolean;
 begin
-  // Cleanup old controls
   for i := ScrollBox1.ControlCount - 1 downto 0 do ScrollBox1.Controls[i].Free;
-
-  UserNameFound := False;
   LastTopPosition := 10;
-  EditSearch.Text := '';
-  // Update Status Bar
-  if (FileName <> '') and FileExists(FileName) then
-    StatusBar1.SimpleText := ' Loaded: ' + FileName
-  else
-    StatusBar1.SimpleText := ' No config found. Using factory defaults.';
+  FoundUser := False;
 
-  if (FileName <> '') and FileExists(FileName) then
+  if FileExists(FileName) then
   begin
+    StatusBar1.SimpleText := ' Config: ' + FileName;
     Ini := TIniFile.Create(FileName);
-    SectionList := TStringList.Create;
-    KeyList := TStringList.Create;
+    Secs := TStringList.Create;
+    Keys := TStringList.Create;
     try
-      Ini.ReadSections(SectionList);
-      for i := 0 to SectionList.Count - 1 do
+      Ini.ReadSections(Secs);
+      for i := 0 to Secs.Count - 1 do
       begin
-        // Create the Category Header
-        CreateDynamicField(SectionList[i], '', True);
-
-        KeyList.Clear;
-        Ini.ReadSection(SectionList[i], KeyList);
-        for j := 0 to KeyList.Count - 1 do
+        CreateDynamicField(Secs[i], '', True);
+        Keys.Clear;
+        Ini.ReadSection(Secs[i], Keys);
+        for j := 0 to Keys.Count - 1 do
         begin
-          if SameText(KeyList[j], 'UserName') then UserNameFound := True;
-          CreateDynamicField(KeyList[j], Ini.ReadString(SectionList[i], KeyList[j], ''));
+          if SameText(Keys[j], 'UserName') then FoundUser := True;
+          CreateDynamicField(Keys[j], Ini.ReadString(Secs[i], Keys[j], ''));
         end;
       end;
     finally
-      KeyList.Free; SectionList.Free; Ini.Free;
+      Secs.Free; Keys.Free; Ini.Free;
     end;
-  end;
-
-  if not UserNameFound then
-  begin
-    CreateDynamicField('Default Settings', '', True);
-    CreateDynamicField('UserName', 'User');
-  end;
-end;
-
-procedure TForm1.FormCloseQuery(Sender: TObject; var CanClose: boolean);
-begin
-  // QuestionDlg is great for WinPE as it is lightweight
-  if QuestionDlg('Exit Confirmation', 'Are you sure you want to exit? Any unsaved changes will be lost.',
-     mtConfirmation, [mrYes, mrNo], 0) = mrYes then
-  begin
-    CanClose := True;
   end
   else
+    StatusBar1.SimpleText := ' No config found. Using defaults.';
+
+  if not FoundUser then
   begin
-    CanClose := False;
+    CreateDynamicField('Identity', '', True);
+    CreateDynamicField('UserName', 'User');
   end;
 end;
 
@@ -256,35 +184,68 @@ begin
   SyncUIWithIni(GetConfigPath);
 end;
 
+procedure TForm1.EditSearchKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+var
+  i: Integer;
+  C: TControl;
+  Txt: string;
+  CurTop: Integer;
+begin
+  Txt := LowerCase(Trim(EditSearch.Text));
+  CurTop := 10;
+  ScrollBox1.DisableAlign;
+  try
+    for i := 0 to ScrollBox1.ControlCount - 1 do
+    begin
+      C := ScrollBox1.Controls[i];
+      C.Visible := (Txt = '') or (Pos(Txt, LowerCase(C.Name)) > 0) or
+                   ((C is TLabel) and (Pos(Txt, LowerCase(TLabel(C).Caption)) > 0)) or
+                   ((C is TCheckBox) and (Pos(Txt, LowerCase(TCheckBox(C).Caption)) > 0));
+
+      if C.Visible then
+      begin
+        if (C is TLabel) or (C is TCheckBox) then
+        begin
+          C.Top := CurTop;
+          CurTop := CurTop + 35;
+        end
+        else if C is TEdit then
+          C.Top := CurTop - 35 - 4;
+      end;
+    end;
+  finally
+    ScrollBox1.EnableAlign;
+  end;
+end;
+
 procedure TForm1.BtnSaveClick(Sender: TObject);
 var
   Ini: TIniFile;
-  I: Integer;
+  i: Integer;
   C: TControl;
-  OutputPath: string;
+  Path: string;
 begin
-  OutputPath := ExtractFilePath(ParamStr(0)) + 'user_choices.ini';
-  
-  // Create new INI (this overwrites existing)
-  Ini := TIniFile.Create(OutputPath);
+  Path := ExtractFilePath(ParamStr(0)) + 'user_choices.ini';
+  Ini := TIniFile.Create(Path);
   try
-    // Iterate through everything inside the ScrollBox
-    for I := 0 to ScrollBox1.ControlCount - 1 do
+    for i := 0 to ScrollBox1.ControlCount - 1 do
     begin
-      C := ScrollBox1.Controls[I];
-      
+      C := ScrollBox1.Controls[i];
       if (C is TEdit) and (Pos('dyn_ed_', C.Name) = 1) then
-        Ini.WriteString('Setup', UnsafeName(C.Name), TEdit(C).Text);
-        
-      if (C is TCheckBox) and (Pos('dyn_cb_', C.Name) = 1) then
+        Ini.WriteString('Setup', UnsafeName(C.Name), TEdit(C).Text)
+      else if (C is TCheckBox) and (Pos('dyn_cb_', C.Name) = 1) then
         Ini.WriteBool('Setup', UnsafeName(C.Name), TCheckBox(C).Checked);
     end;
   finally
     Ini.Free;
   end;
-
-  ShowMessage('Settings saved to: ' + OutputPath);
+  ShowMessage('Saved to ' + Path);
   Application.Terminate;
+end;
+
+procedure TForm1.FormCloseQuery(Sender: TObject; var CanClose: boolean);
+begin
+  CanClose := QuestionDlg('Exit', 'Close without saving?', mtConfirmation, [mrYes, mrNo], 0) = mrYes;
 end;
 
 end.

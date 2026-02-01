@@ -17,12 +17,12 @@ type
     StatusBar1: TStatusBar;
     procedure FormCreate(Sender: TObject);
     procedure BtnSaveClick(Sender: TObject);
+    procedure EditSearchKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
   private
     { Internal Layout and State }
     LastTopPosition: Integer;
     procedure CreateDynamicField(const AName, AValue: string; IsHeader: Boolean = False);
     procedure FormCloseQuery(Sender: TObject; var CanClose: boolean);
-    procedure EditSearchKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
     function SafeName(const AKey: string): string;
     function UnsafeName(const AName: string): string;
     function GetConfigPath: string;
