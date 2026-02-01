@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<CONFIG>
-  <Compiler Value="/usr/bin/fpc" Date="1704440408"/>
-  <Params Value=" -MObjFPC -Scghi -Cg -O1 -Xs -l -vewnhibq -Fi/media/odmin/Data/PC_soft/winpe_config_updater/lib/x86_64-linux -Fu/home/odmin/.lazarus/lib/units/x86_64-win64/win32 -Fu/home/odmin/.lazarus/lib/LCLBase/units/x86_64-win64 -Fu/home/odmin/.lazarus/lib/freetypelaz/lib/x86_64-win64 -Fu/usr/lib/lazarus/3.0/components/lazutils/lib/x86_64-linux -Fu/usr/lib/lazarus/3.0/packager/units/x86_64-linux -Fu/media/odmin/Data/PC_soft/winpe_config_updater/ -FU/media/odmin/Data/PC_soft/winpe_config_updater/lib/x86_64-linux/ -FE/media/odmin/Data/PC_soft/winpe_config_updater/ -o/media/odmin/Data/PC_soft/winpe_config_updater/tweak_chooser_x64 -dLCL -dLCLgtk2 tweak_chooser.lpr"/>
-  <Complete Value="False"/>
-</CONFIG>
