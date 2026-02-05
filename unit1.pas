@@ -65,15 +65,27 @@ begin
   begin
     ParamVal := Application.GetOptionValue('c', 'config');
 
-    // Check if it's a full path already
+    // 1. Remove Double Quotes (")
+    if (Length(ParamVal) >= 2) and (ParamVal[1] = '"') and (ParamVal[Length(ParamVal)] = '"') then
+    begin
+      ParamVal := Copy(ParamVal, 2, Length(ParamVal) - 2);
+    end;
+
+    // 2. Remove Single Quotes (')
+    // In Pascal, '''' represents a single ' character
+    if (Length(ParamVal) >= 2) and (ParamVal[1] = '''') and (ParamVal[Length(ParamVal)] = '''') then
+    begin
+      ParamVal := Copy(ParamVal, 2, Length(ParamVal) - 2);
+    end;
+
+    // 3. Resolve Path (Full, Relative, or Local)
     if FileExists(ParamVal) then
       Result := ParamVal
-    // Check if it's a relative path or filename in AppDir
     else if FileExists(ExeDir + ParamVal) then
       Result := ExeDir + ParamVal;
   end;
 
-  // Search for *default*.ini if no valid path provided yet
+  // 4. Fallback search for *default*.ini
   if (Result = '') or (not FileExists(Result)) then
   begin
     if FindFirst(ExeDir + '*default*.ini', faAnyFile, SR) = 0 then
