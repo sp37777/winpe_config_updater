@@ -63,7 +63,20 @@ object Form1: TForm1
     Width = 274
     BorderSpacing.Top = 5
     TabOrder = 3
-    Text = 'EditSearch'
+    TextHint = 'search property'
     OnKeyUp = EditSearchKeyUp
+  end
+  object BtnClearSearch: TSpeedButton
+    AnchorSideLeft.Control = EditSearch
+    AnchorSideLeft.Side = asrBottom
+    Cursor = crHandPoint
+    Left = 335
+    Height = 22
+    Top = 5
+    Width = 22
+    Caption = 'X'
+    Flat = True
+    Visible = False
+    OnClick = BtnClearSearchClick
   end
 end

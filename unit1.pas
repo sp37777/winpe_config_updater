@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ExtCtrls, StdCtrls,
-  IniFiles, ComCtrls;
+  IniFiles, ComCtrls, Buttons, Process, FileUtil, Windows;
 
 type
   { TForm1 }
@@ -14,19 +14,24 @@ type
     BtnSave: TButton;
     EditSearch: TEdit;
     ScrollBox1: TScrollBox;
+    BtnClearSearch: TSpeedButton;
     StatusBar1: TStatusBar;
     procedure FormCreate(Sender: TObject);
     procedure BtnSaveClick(Sender: TObject);
     procedure EditSearchKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure FormCloseQuery(Sender: TObject; var CanClose: boolean);
+    procedure BtnClearSearchClick(Sender: TObject);
   private
     LastTopPosition: Integer;
     procedure CreateDynamicField(const AName, AValue: string; IsHeader: Boolean = False);
     function SafeName(const AKey: string): string;
     function UnsafeName(const AName: string): string;
     function GetConfigPath: string;
+    procedure CloseFormTimer(Sender: TObject);
+    function IsVolumeDirty(const ADrive: string): Boolean;
   public
     procedure SyncUIWithIni(const FileName: string);
+    procedure SelfClosingMsg(const ATitle, AMsg: string; ADuration: Integer);
   end;
 
 var
@@ -56,42 +61,29 @@ end;
 function TForm1.GetConfigPath: string;
 var
   SR: TSearchRec;
-  ExeDir, ParamVal: string;
+  BaseDir, ParamVal: string;
 begin
   Result := '';
-  ExeDir := ExtractFilePath(ParamStr(0));
+  BaseDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0)));
 
   if Application.HasOption('c', 'config') then
   begin
     ParamVal := Application.GetOptionValue('c', 'config');
-
-    // 1. Remove Double Quotes (")
-    if (Length(ParamVal) >= 2) and (ParamVal[1] = '"') and (ParamVal[Length(ParamVal)] = '"') then
-    begin
-      ParamVal := Copy(ParamVal, 2, Length(ParamVal) - 2);
-    end;
-
-    // 2. Remove Single Quotes (')
-    // In Pascal, '''' represents a single ' character
-    if (Length(ParamVal) >= 2) and (ParamVal[1] = '''') and (ParamVal[Length(ParamVal)] = '''') then
-    begin
-      ParamVal := Copy(ParamVal, 2, Length(ParamVal) - 2);
-    end;
-
-    // 3. Resolve Path (Full, Relative, or Local)
-    if FileExists(ParamVal) then
+    
+    // Check absolute path or path relative to the app folder
+    if FileExists(ParamVal) then 
       Result := ParamVal
-    else if FileExists(ExeDir + ParamVal) then
-      Result := ExeDir + ParamVal;
+    else if FileExists(BaseDir + ParamVal) then 
+      Result := BaseDir + ParamVal;
   end;
 
-  // 4. Fallback search for *default*.ini
-  if (Result = '') or (not FileExists(Result)) then
+  // Fallback to local default file
+  if (Result = '') then
   begin
-    if FindFirst(ExeDir + '*default*.ini', faAnyFile, SR) = 0 then
+    if FindFirst(BaseDir + '*default*.ini', faAnyFile, SR) = 0 then
     begin
-      Result := ExeDir + SR.Name;
-      FindClose(SR);
+      Result := BaseDir + SR.Name;
+      SysUtils.FindClose(SR); 
     end;
   end;
 end;
@@ -191,8 +183,90 @@ begin
   end;
 end;
 
+procedure TForm1.CloseFormTimer(Sender: TObject);
+begin
+  // 'Sender' is the Timer. Its 'Owner' is the Form created in SelfClosingMsg.
+  if (Sender is TTimer) and (TTimer(Sender).Owner is TForm) then
+    TForm(TTimer(Sender).Owner).Close;
+end;
+
+procedure TForm1.SelfClosingMsg(const ATitle, AMsg: string; ADuration: Integer);
+var
+  MsgForm: TForm;
+  MsgLabel: TLabel;
+  Timer: TTimer;
+begin
+  MsgForm := TForm.Create(nil);
+  with MsgForm do
+  begin
+    BorderStyle := bsDialog;
+    Caption := ATitle;
+    Position := poScreenCenter;
+    Width := 300;
+    Height := 100;
+    FormStyle := fsStayOnTop;
+  end;
+
+  MsgLabel := TLabel.Create(MsgForm);
+  with MsgLabel do
+  begin
+    Parent := MsgForm;
+    Align := alClient;
+    Alignment := taCenter;
+    Layout := tlCenter;
+    Caption := AMsg;
+  end;
+
+  Timer := TTimer.Create(MsgForm);
+  Timer.Interval := ADuration;
+  // Now this will compile because it points to a method of TForm1
+  Timer.OnTimer := @CloseFormTimer;
+
+  MsgForm.Show;
+end;
+
+function TForm1.IsVolumeDirty(const ADrive: string): Boolean;
+var
+  hDevice: THandle;
+  VolumeFlags: DWORD;
+  BytesReturned: DWORD;
+  DrivePath: string;
+begin
+  Result := False;
+  // Format drive for CreateFile (e.g., \\.\D:)
+  DrivePath := '\\.\' + Copy(ADrive, 1, 2);
+  
+  hDevice := CreateFile(PChar(DrivePath),
+    GENERIC_READ,
+    FILE_SHARE_READ or FILE_SHARE_WRITE,
+    nil,
+    OPEN_EXISTING,
+    FILE_ATTRIBUTE_NORMAL,
+    0);
+
+  if hDevice <> INVALID_HANDLE_VALUE then
+  begin
+    try
+      // IOCTL_DISK_IS_WRITABLE or checking volume flags
+      // For a simpler method in WinPE, we check the Volume Flags
+      if DeviceIoControl(hDevice, 
+         $00090028, // FSCTL_IS_VOLUME_DIRTY
+         nil, 0, 
+         @VolumeFlags, SizeOf(VolumeFlags), 
+         BytesReturned, nil) then
+      begin
+        // If the first bit is 1, the volume is dirty
+        Result := (VolumeFlags and 1) <> 0;
+      end;
+    finally
+      CloseHandle(hDevice);
+    end;
+  end;
+end;
+
 procedure TForm1.FormCreate(Sender: TObject);
 begin
+  Self.Position := poScreenCenter;
   SyncUIWithIni(GetConfigPath);
 end;
 
@@ -203,6 +277,8 @@ var
   Txt: string;
   CurTop: Integer;
 begin
+  // Show the 'X' button only if the search box isn't empty
+  BtnClearSearch.Visible := (EditSearch.Text <> '');
   Txt := LowerCase(Trim(EditSearch.Text));
   CurTop := 10;
   ScrollBox1.DisableAlign;
@@ -232,32 +308,67 @@ end;
 
 procedure TForm1.BtnSaveClick(Sender: TObject);
 var
-  Ini: TIniFile;
+  SL: TStringList;
   i: Integer;
   C: TControl;
-  Path: string;
+  BaseDir, OutputPath: string;
 begin
-  Path := ExtractFilePath(ParamStr(0)) + 'user_choices.ini';
-  Ini := TIniFile.Create(Path);
+  // Since we aren't moving to X:, we always use the EXE folder
+  BaseDir := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0)));
+  OutputPath := BaseDir + 'user_choices.ini';
+
+  SL := TStringList.Create;
   try
+    // Section 1: Metadata for verification
+    SL.Add('[Metadata]');
+    SL.Add('LastSaved=' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Now));
+    SL.Add('');
+
+    // Section 2: User choices
+    SL.Add('[Setup]');
     for i := 0 to ScrollBox1.ControlCount - 1 do
     begin
       C := ScrollBox1.Controls[i];
       if (C is TEdit) and (Pos('dyn_ed_', C.Name) = 1) then
-        Ini.WriteString('Setup', UnsafeName(C.Name), TEdit(C).Text)
+        SL.Add(UnsafeName(C.Name) + '=' + TEdit(C).Text)
       else if (C is TCheckBox) and (Pos('dyn_cb_', C.Name) = 1) then
-        Ini.WriteBool('Setup', UnsafeName(C.Name), TCheckBox(C).Checked);
+        SL.Add(UnsafeName(C.Name) + '=' + BoolToStr(TCheckBox(C).Checked, '1', '0'));
+    end;
+
+    try
+      SL.SaveToFile(OutputPath);
+      SelfClosingMsg('Success', 'Settings Saved!' + sLineBreak + OutputPath, 3000);
+      Application.ProcessMessages;
+      Sleep(3000);
+      Application.Terminate;
+    except
+      on E: Exception do
+        MessageDlg('Critical Save Error', 
+          'Error writing to USB: ' + E.Message, mtError, [mbOK], 0);
     end;
   finally
-    Ini.Free;
+    SL.Free;
   end;
-  ShowMessage('Saved to ' + Path);
-  Application.Terminate;
 end;
 
 procedure TForm1.FormCloseQuery(Sender: TObject; var CanClose: boolean);
 begin
   CanClose := QuestionDlg('Exit', 'Close without saving?', mtConfirmation, [mrYes, mrNo], 0) = mrYes;
+end;
+
+procedure TForm1.BtnClearSearchClick(Sender: TObject);
+var
+  DummyKey: Word;
+  DummyShift: TShiftState;
+begin
+  EditSearch.Text := '';
+
+  // Manually trigger the KeyUp logic to refresh the layout
+  DummyKey := 0;
+  DummyShift := [];
+  EditSearchKeyUp(EditSearch, DummyKey, DummyShift);
+
+  EditSearch.SetFocus;
 end;
 
 end.
